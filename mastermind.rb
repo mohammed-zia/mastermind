@@ -94,6 +94,14 @@ class Board
     end
     translated
   end
+
+  def check_guess(guess, board)
+    if guess.size != 4
+      false
+    elsif guess.all? { |colour| board.allowable_moves.any?(colour) } == false
+      false
+    end
+  end
 end
 
 # Our player class to keep track of score
@@ -107,18 +115,7 @@ end
 
 # We need a codemaker class that inherits from player
 class Codemaker < Player
-  def generate_code(board)
-    char_code = []
-    4.times do
-      random_int = rand(0..5)
-      colour = board.allowable_moves[random_int]
-      char_code.push(colour)
-    end
-    board.translate_input(char_code)
-  end
-
-  def set_code(board)
-    code = generate_code(board)
+  def set_code(board, code)
     board.update_code(code)
   end
 
@@ -145,8 +142,43 @@ class Codemaker < Player
   end
 end
 
+class ComputerCodemaker < Codemaker
+  def generate_code(board)
+    char_code = []
+    4.times do
+      random_int = rand(0..5)
+      colour = board.allowable_moves[random_int]
+      char_code.push(colour)
+    end
+    board.translate_input(char_code)
+  end
+end
+
+class HumanCodemaker < Codemaker
+  def human_secret_code(board)
+    puts "\n"
+    puts 'Enter a secret code for the CPU to guess'
+    puts "\n"
+    puts 'Valid colours are red, green, blue, yellow, orange and purple.'
+    puts "\n"
+    puts "An example input would be 'rgby' for red, green, blue, yellow"
+    puts "\n"
+    puts 'Enter 4 characters that correspond to a colour (r for red, b for blue etc.)'
+    puts "\n"
+    code_string = gets.chomp
+    code = code_string.upcase.delete(' ').split('')
+    if board.check_guess(code, board) != false
+      new_code = board.translate_input(code)
+      # board.update_code(new_code)
+    else
+      puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
+      human_secret_code(board)
+    end
+  end
+end
+
 # We need a class for the codebreaker that inherits from player
-class Codebreaker < Player
+class HumanCodebreaker
   def make_guess(board, round)
     puts "\n"
     puts 'Valid colours are red, green, blue, yellow, orange and purple.'
@@ -157,7 +189,7 @@ class Codebreaker < Player
     puts "\n"
     guess_string = gets.chomp
     guess = guess_string.upcase.delete(' ').split('')
-    if check_guess(guess, board) != false
+    if board.check_guess(guess, board) != false
       new_guess = board.translate_input(guess)
       board.update_board(round, new_guess)
     else
@@ -165,30 +197,42 @@ class Codebreaker < Player
       make_guess(board, round)
     end
   end
+end
 
-  def check_guess(guess, board)
-    if guess.size != 4
-      false
-    elsif guess.all? { |colour| board.allowable_moves.any?(colour) } == false
-      false
+class ComputerCodebreaker
+  # For now we'll have a random guess made by CPU to iron out issues, eventually this will be based on an algorithm.
+  def make_guess(board, round)
+    array_guess = []
+    4.times do
+      random_int = rand(0..5)
+      colour = board.allowable_moves[random_int]
+      array_guess.push(colour)
+    end
+    if board.check_guess(array_guess, board) != false
+      translated_guess = board.translate_input(array_guess)
+      board.update_board(round, translated_guess)
+    else
+      puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
+      make_guess(board, round)
     end
   end
 end
 
 # Our class to keep track of the game instance
-class Game
+class ComputerCodemakerGame
   attr_accessor :round
 
   def initialize
     @round = 0
     board = Board.new
-    human = Codebreaker.new
-    cpu = Codemaker.new
+    human = HumanCodebreaker.new
+    cpu = ComputerCodemaker.new
     start_game(cpu, board, human)
   end
 
   def start_game(cpu, board, human)
-    cpu.set_code(board)
+    code = cpu.generate_code(board)
+    cpu.set_code(board, code)
     puts "Let's play Mastermind!"
     sleep(1)
     puts 'Human is the codebreaker'
@@ -229,4 +273,73 @@ class Game
   end
 end
 
-Game.new
+class HumanCodemakerGame 
+  attr_accessor :round
+
+  def initialize
+    @round = 0
+    board = Board.new
+    computer = ComputerCodebreaker.new
+    human = HumanCodemaker.new
+    start_game(human, board, computer)
+  end
+
+  def start_game(human, board, computer)
+    code = human.human_secret_code(board)
+    human.set_code(board, code)
+    puts "Let's play Mastermind!"
+    sleep(1)
+    puts 'Human is the codemaker'
+    sleep(1)
+    puts 'CPU is the codebreaker'
+    sleep(1)
+    puts "The CPU has 12 rounds to guess the human's code"
+    sleep(1)
+    puts 'The CPU will recieve feedback after each guess'
+    sleep(1)
+    while @round < 12
+      play_round(computer, human, board, @round)
+      @round += 1
+      sleep(2)
+    end
+    board.print_board
+    puts "The code was #{board.code_board}"
+    puts "Computer couldn't crack the code, human wins!".colorize(:green)
+  end
+
+  def game_won?(board, round)
+    board.guess_board[round] == board.code_board
+  end
+
+  def play_round(computer, human, board, round)
+    puts "\n"
+    puts "Round: #{@round + 1}"
+    puts "\n"
+    puts 'Current Board: '
+    puts "\n"
+    board.print_board
+    computer.make_guess(board, round)
+    human.give_feedback(board, round)
+    if game_won?(board, round)
+      board.print_board
+      puts 'Computer cracked the code, computer wins!'.colorize(:red)
+      exit
+    end
+  end
+end
+
+def main
+  puts 'Who will be the codebreaker; Computer or Human?'
+  desired_codebreaker = gets.chomp
+  cleaned_codebreaker = desired_codebreaker.upcase.delete(' ')
+  if cleaned_codebreaker == 'HUMAN'
+    ComputerCodemakerGame.new
+  elsif cleaned_codebreaker == 'COMPUTER'
+    HumanCodemakerGame.new
+  else
+    puts "Please enter either 'human' or 'computer'"
+    main
+  end
+end
+
+main
