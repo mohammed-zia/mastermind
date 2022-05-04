@@ -1,6 +1,5 @@
-# frozen_string_literal: true
-
 require 'colorize'
+require 'set'
 
 # We'll make a class from which we'll create our board object
 class Board
@@ -48,6 +47,12 @@ class Board
   end
 
   def print_board
+    puts "\n"
+    puts "\n"
+    puts "\n"
+    puts "\n"
+    puts "\n"
+    puts "\n"
     puts '-----+-GUESSES-+----++----+--HINTS--+----+'
     (0..11).each do |i|
       puts "| #{@guess_board[i][0]} | #{@guess_board[i][1]} | #{@guess_board[i][2]} | #{@guess_board[i][3]} || #{@peg_board[i][0]} : #{@peg_board[i][1]} : #{@peg_board[i][2]} : #{@peg_board[i][3]} :"
@@ -65,6 +70,12 @@ class Board
 
   def update_hint(round, hint)
     @peg_board[round].unshift(hint)
+  end
+
+  def update_hint_arr(round, hint)
+    hint.each do |colour|
+      @peg_board[round].unshift(colour)
+    end
   end
 
   def get_current_round(round)
@@ -102,6 +113,7 @@ class Board
       false
     end
   end
+
 end
 
 # Our player class to keep track of score
@@ -168,8 +180,7 @@ class HumanCodemaker < Codemaker
     code_string = gets.chomp
     code = code_string.upcase.delete(' ').split('')
     if board.check_guess(code, board) != false
-      new_code = board.translate_input(code)
-      # board.update_code(new_code)
+      board.translate_input(code)
     else
       puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
       human_secret_code(board)
@@ -192,25 +203,6 @@ class HumanCodebreaker
     if board.check_guess(guess, board) != false
       new_guess = board.translate_input(guess)
       board.update_board(round, new_guess)
-    else
-      puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
-      make_guess(board, round)
-    end
-  end
-end
-
-class ComputerCodebreaker
-  # For now we'll have a random guess made by CPU to iron out issues, eventually this will be based on an algorithm.
-  def make_guess(board, round)
-    array_guess = []
-    4.times do
-      random_int = rand(0..5)
-      colour = board.allowable_moves[random_int]
-      array_guess.push(colour)
-    end
-    if board.check_guess(array_guess, board) != false
-      translated_guess = board.translate_input(array_guess)
-      board.update_board(round, translated_guess)
     else
       puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
       make_guess(board, round)
@@ -273,57 +265,174 @@ class ComputerCodemakerGame
   end
 end
 
-class HumanCodemakerGame 
-  attr_accessor :round
-
+class ComputerCodebreaker
   def initialize
-    @round = 0
-    board = Board.new
-    computer = ComputerCodebreaker.new
-    human = HumanCodemaker.new
-    start_game(human, board, computer)
-  end
-
-  def start_game(human, board, computer)
-    code = human.human_secret_code(board)
-    human.set_code(board, code)
-    puts "Let's play Mastermind!"
-    sleep(1)
-    puts 'Human is the codemaker'
-    sleep(1)
-    puts 'CPU is the codebreaker'
-    sleep(1)
-    puts "The CPU has 12 rounds to guess the human's code"
-    sleep(1)
-    puts 'The CPU will recieve feedback after each guess'
-    sleep(1)
-    while @round < 12
-      play_round(computer, human, board, @round)
-      @round += 1
-      sleep(2)
+    puts " \u{1f9e0} CPU training algorithm..."
+    colors = "123456".chars
+    @all_answers = colors.product(*[colors] * 3).map(&:join)
+    @all_scores = Hash.new { |h, k| h[k] = {} }
+    @board = Board.new
+    @all_answers.product(@all_answers).each do |guess, answer|
+      @all_scores[guess][answer] = calculate_score(guess, answer)
     end
-    board.print_board
-    puts "The code was #{board.code_board}"
-    puts "Computer couldn't crack the code, human wins!".colorize(:green)
+    @all_answers = @all_answers.to_set
+    play
   end
 
-  def game_won?(board, round)
-    board.guess_board[round] == board.code_board
+  def translate_input_to_num(code)
+    num_arr = []
+    code.each do |colour|
+      if colour == 'R'
+        num_arr.push("1")
+      elsif colour == 'O'
+        num_arr.push("2")
+      elsif colour == 'Y'
+        num_arr.push("3")
+      elsif colour == 'G'
+        num_arr.push("4")
+      elsif colour == 'B'
+        num_arr.push("5")
+      elsif colour == 'P'
+        num_arr.push("6")
+      end
+    end
+    num_arr.join('')
   end
 
-  def play_round(computer, human, board, round)
+  def human_secret_code(board)
+    sleep(1.5)
     puts "\n"
-    puts "Round: #{@round + 1}"
+    puts 'Enter a secret code for the CPU to guess'
     puts "\n"
-    puts 'Current Board: '
+    sleep(1.5)
+    puts "Valid colours are red, green, blue, yellow, orange and purple."
     puts "\n"
-    board.print_board
-    computer.make_guess(board, round)
-    human.give_feedback(board, round)
-    if game_won?(board, round)
-      board.print_board
-      puts 'Computer cracked the code, computer wins!'.colorize(:red)
-      exit
+    sleep(1.5)
+    puts "An example input would be 'rgby' for red, green, blue, yellow"
+    puts "\n"
+    sleep(1.5)
+    puts 'Enter 4 characters that correspond to a colour (r for red, b for blue etc.)'
+    puts "\n"
+    code_string = gets.chomp
+    code = code_string.upcase.delete(' ').split('')
+    if board.check_guess(code, board) != false
+      translate_input_to_num(code)
+    else
+      puts 'Invalid entry. Please only enter allowed colours.'.colorize(:red)
+      human_secret_code(board)
+    end
+  end
+
+  def make_guess
+    if @guesses > 0
+      @possible_answers.keep_if { |answer|
+        @all_scores[@guess][answer] == @score 
+      }
+      guesses = @possible_scores.map do |guess, scores_by_answer|
+        scores_by_answer = scores_by_answer.select { |answer, score| 
+          @possible_answers.include?(answer)
+        }
+        @possible_scores[guess] = scores_by_answer
+        score_groups = scores_by_answer.values.group_by(&:itself)
+        possibility_counts = score_groups.values.map(&:length)
+        worst_case_possibilities = possibility_counts.max
+        impossible_guess = @possible_answers.include?(guess) ? 0 : 1
+        [worst_case_possibilities, impossible_guess, guess]
+      end
+
+      guesses.min.last
+    else
+      "1122"
+    end
+  end
+
+  def calculate_score(guess, answer)
+    score = ""
+    wrong_guess_pegs, wrong_answer_pegs = [], []
+    peg_pairs = guess.chars.zip(answer.chars)
+
+    peg_pairs.each do |guess_peg, answer_peg|
+      if guess_peg == answer_peg
+        score << "B"
+      else
+        wrong_guess_pegs << guess_peg
+        wrong_answer_pegs << answer_peg
+      end
+    end
+    wrong_guess_pegs.each do |peg|
+      if wrong_answer_pegs.include?(peg)
+        wrong_answer_pegs.delete(peg)
+        score << "W"
+      end
+    end
+    score
+  end
+
+  def transform_guess(guess)
+    transformed = []
+    guess = guess.split('')
+    guess.each do |colour|
+      if colour == '1'
+        transformed.push("\u{1f534}")
+      elsif colour == '2'
+        transformed.push("\u{1f7e0}")
+      elsif colour == '3'
+        transformed.push("\u{1f7e1}")
+      elsif colour == '4'
+        transformed.push("\u{1f7e2}")
+      elsif colour == '5'
+        transformed.push("\u{1f535}")
+      elsif colour == '6'
+        transformed.push("\u{1f7e3}")
+      end
+    end
+    transformed
+  end
+
+  def transform_score(score)
+    transformed = []
+    score_arr = score.split('')
+    score_arr.each do |colour|
+      if colour == "B"
+        transformed.push("\u{1f534}")
+      elsif colour == "W"
+        transformed.push("\u{26aa}")
+      end
+    end
+    transformed
+  end
+
+  def play
+    @guesses=0
+    @answer = human_secret_code(@board)
+    @possible_scores = @all_scores.dup
+    @possible_answers = @all_answers.dup
+    puts "Let's play Mastermind!"
+    sleep(1.5)
+    puts 'Human is the codemaker'
+    sleep(1.5)
+    puts 'CPU is the codebreaker'
+    sleep(1.5)
+    puts "The CPU has 12 rounds to guess the human's code"
+    sleep(1.5)
+    puts 'The CPU will recieve feedback after each guess'
+    sleep(1.5)
+    while @guesses < 12
+      @guess = make_guess
+      if @all_answers.include?(@guess)
+        @score = calculate_score(@guess, @answer)
+        guess_arr_trans = transform_guess(@guess)
+        score_arr_trans = transform_score(@score)
+        @board.update_board(@guesses, guess_arr_trans)
+        @board.update_hint_arr(@guesses, score_arr_trans)
+        @board.print_board
+        sleep(1.5)
+        @guesses += 1
+        if @score == 'BBBB'
+          puts "CPU guessed your code in #{@guesses} guesses! Better luck next time..."
+          break
+        end
+      end
     end
   end
 end
@@ -335,7 +444,7 @@ def main
   if cleaned_codebreaker == 'HUMAN'
     ComputerCodemakerGame.new
   elsif cleaned_codebreaker == 'COMPUTER'
-    HumanCodemakerGame.new
+    ComputerCodebreaker.new
   else
     puts "Please enter either 'human' or 'computer'"
     main
